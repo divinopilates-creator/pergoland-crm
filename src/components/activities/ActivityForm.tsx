@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,6 +8,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Paperclip, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -25,11 +26,12 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 const activitySchema = z.object({
-  type: z.enum(["call", "email", "meeting", "note", "follow_up"]),
+  type: z.enum(["call", "email", "meeting", "note", "follow_up", "cotizacion", "visita"]),
   description: z.string().min(1, "La descripcion es requerida"),
   contactId: z.string().min(1, "El contacto es requerido"),
   dealId: z.string(),
   scheduledAt: z.string(),
+  dealValue: z.string(),
 });
 
 type ActivityFormData = z.infer<typeof activitySchema>;
@@ -49,6 +51,9 @@ export function ActivityForm({
 }: ActivityFormProps) {
   const router = useRouter();
   const [contactsList, setContacts] = useState<Array<{ id: string; name: string }>>([]);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open && !preselectedContactId) {
@@ -73,11 +78,24 @@ export function ActivityForm({
       contactId: preselectedContactId || "",
       dealId: preselectedDealId || "",
       scheduledAt: "",
+      dealValue: "",
     },
   });
 
   const onSubmit = async (data: ActivityFormData) => {
     try {
+      setUploading(true);
+      let attachmentPath: string | null = null;
+
+      if (pdfFile) {
+        const fd = new FormData();
+        fd.append("file", pdfFile);
+        const upRes = await fetch("/api/upload", { method: "POST", body: fd });
+        if (!upRes.ok) throw new Error("Error al subir el PDF");
+        const upData = await upRes.json();
+        attachmentPath = upData.path;
+      }
+
       const res = await fetch("/api/activities", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -87,6 +105,8 @@ export function ActivityForm({
           contactId: data.contactId,
           dealId: data.dealId || null,
           scheduledAt: data.scheduledAt || null,
+          attachmentPath,
+          dealValue: data.dealValue ? parseInt(data.dealValue.replace(/\D/g, ""), 10) : null,
         }),
       });
 
@@ -94,10 +114,13 @@ export function ActivityForm({
 
       toast.success("Actividad registrada");
       reset();
+      setPdfFile(null);
       onClose();
       router.refresh();
     } catch {
       toast.error("Error al registrar la actividad");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -126,6 +149,8 @@ export function ActivityForm({
                 <SelectItem value="meeting">Reunion</SelectItem>
                 <SelectItem value="note">Nota</SelectItem>
                 <SelectItem value="follow_up">Seguimiento</SelectItem>
+                <SelectItem value="cotizacion">📄 Cotización enviada</SelectItem>
+                <SelectItem value="visita">📅 Visita programada</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -171,10 +196,55 @@ export function ActivityForm({
             </div>
           )}
 
-          {watch("type") === "follow_up" && (
+          {(watch("type") === "follow_up" || watch("type") === "visita") && (
             <div className="space-y-2">
               <Label>Fecha programada</Label>
               <Input type="datetime-local" {...register("scheduledAt")} />
+            </div>
+          )}
+
+          {watch("type") === "cotizacion" && (
+            <div className="space-y-2">
+              <Label htmlFor="deal-value">Valor cotización $</Label>
+              <Input
+                id="deal-value"
+                {...register("dealValue")}
+                placeholder="Ej: 6900000"
+                type="number"
+                min="0"
+              />
+            </div>
+          )}
+
+          {(watch("type") === "cotizacion" || watch("type") === "email") && (
+            <div className="space-y-2">
+              <Label>Adjuntar PDF (opcional)</Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+              />
+              {pdfFile ? (
+                <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                  <Paperclip className="h-4 w-4 text-muted-foreground" />
+                  <span className="flex-1 truncate">{pdfFile.name}</span>
+                  <button type="button" onClick={() => setPdfFile(null)}>
+                    <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Paperclip className="mr-2 h-4 w-4" />
+                  Seleccionar PDF
+                </Button>
+              )}
             </div>
           )}
 
@@ -189,10 +259,10 @@ export function ActivityForm({
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || uploading}
               className="cursor-pointer"
             >
-              {isSubmitting ? "Guardando..." : "Registrar"}
+              {uploading ? "Subiendo PDF..." : isSubmitting ? "Guardando..." : "Registrar"}
             </Button>
           </div>
         </form>

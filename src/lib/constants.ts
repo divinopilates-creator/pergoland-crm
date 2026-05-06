@@ -32,6 +32,8 @@ export const ACTIVITY_TYPE_CONFIG: Record<
   meeting: { label: "Reunion", icon: "Users" },
   note: { label: "Nota", icon: "FileText" },
   follow_up: { label: "Seguimiento", icon: "Clock" },
+  cotizacion: { label: "Cotización enviada", icon: "FileText" },
+  visita: { label: "Visita programada", icon: "Calendar" },
 };
 
 export function formatCurrency(cents: number): string {

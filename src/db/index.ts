@@ -98,6 +98,50 @@ function initTables(db: Database.Database): void {
   }
 }
 
+function runMigrations(db: Database.Database): void {
+  try {
+    // Add attachment_path column if missing
+    const cols = db.prepare("PRAGMA table_info(activities)").all() as Array<{ name: string }>;
+    if (!cols.find((c) => c.name === "attachment_path")) {
+      db.exec("ALTER TABLE activities ADD COLUMN attachment_path TEXT");
+    }
+
+    // Add Cotización Enviada and Visita Programada stages if missing
+    const stageNames = (db.prepare("SELECT name FROM pipeline_stages").all() as Array<{ name: string }>).map((s) => s.name);
+    const maxOrder = (db.prepare("SELECT MAX(\"order\") as mo FROM pipeline_stages").get() as { mo: number | null }).mo || 4;
+
+    const missingStages = [
+      { name: "Cotización Enviada", color: "#0891b2", order: maxOrder + 1 },
+      { name: "Visita Programada", color: "#d97706", order: maxOrder + 2 },
+    ].filter((s) => !stageNames.includes(s.name));
+
+    const insertStage = db.prepare(`INSERT INTO pipeline_stages (id, name, "order", color, is_won, is_lost) VALUES (?, ?, ?, ?, 0, 0)`);
+    for (const s of missingStages) {
+      insertStage.run(crypto.randomUUID(), s.name, s.order, s.color);
+    }
+    // Limpiar etapas duplicadas: mover las nuevas a posición correcta y eliminar las viejas
+    try {
+      const oldCot = db.prepare("SELECT id FROM pipeline_stages WHERE name = 'Cotizacion Enviada'").get() as { id: string } | undefined;
+      const newCot = db.prepare("SELECT id FROM pipeline_stages WHERE name = 'Cotización Enviada'").get() as { id: string } | undefined;
+      const oldVis = db.prepare("SELECT id FROM pipeline_stages WHERE name = 'Visita Medicion'").get() as { id: string } | undefined;
+      const newVis = db.prepare("SELECT id FROM pipeline_stages WHERE name = 'Visita Programada'").get() as { id: string } | undefined;
+
+      if (oldCot && newCot) {
+        db.prepare("UPDATE pipeline_stages SET \"order\" = 3 WHERE id = ?").run(newCot.id);
+        db.prepare("DELETE FROM pipeline_stages WHERE id = ?").run(oldCot.id);
+      }
+      if (oldVis && newVis) {
+        db.prepare("UPDATE pipeline_stages SET \"order\" = 4 WHERE id = ?").run(newVis.id);
+        db.prepare("DELETE FROM pipeline_stages WHERE id = ?").run(oldVis.id);
+      }
+    } catch {
+      // ignore
+    }
+  } catch {
+    // Migrations can fail on first boot before tables exist — safe to ignore
+  }
+}
+
 function seedDefaultStages(db: Database.Database): void {
   try {
     const result = db
@@ -140,6 +184,7 @@ function seedDefaultStages(db: Database.Database): void {
 
 const sqlite = createDatabase();
 initTables(sqlite);
+runMigrations(sqlite);
 seedDefaultStages(sqlite);
 
 export const db = drizzle(sqlite, { schema });

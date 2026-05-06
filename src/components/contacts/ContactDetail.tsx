@@ -23,11 +23,14 @@ import {
   MessageCircle,
   Copy,
   Check,
+  Send,
+  Paperclip,
 } from "lucide-react";
 import { formatCurrency, formatDate, formatRelativeDate, cleanPhoneForWhatsApp } from "@/lib/constants";
 import { ACTIVITY_TYPE_CONFIG, SOURCE_LABELS } from "@/lib/constants";
 import { toast } from "sonner";
 import type { Temperature, ActivityType, LeadSource } from "@/types";
+import { WhatsAppChat } from "./WhatsAppChat";
 
 const activityIcons: Record<string, typeof Phone> = {
   call: Phone,
@@ -65,6 +68,7 @@ interface ContactDetailClientProps {
     description: string;
     scheduledAt: number | Date | null;
     completedAt: number | Date | null;
+    attachmentPath: string | null;
     createdAt: number | Date;
   }>;
 }
@@ -78,6 +82,26 @@ export function ContactDetailClient({
   const [showEditForm, setShowEditForm] = useState(false);
   const [showActivityForm, setShowActivityForm] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"actividades" | "conversacion">("actividades");
+  const [sendingEmail, setSendingEmail] = useState<string | null>(null);
+
+  const handleSendEmail = async (activityId: string) => {
+    setSendingEmail(activityId);
+    try {
+      const res = await fetch("/api/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactId: contact.id, activityId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al enviar");
+      toast.success(`Cotización enviada a ${data.to}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error al enviar email");
+    } finally {
+      setSendingEmail(null);
+    }
+  };
 
   const handleCopy = async (value: string, field: string) => {
     try {
@@ -283,62 +307,82 @@ export function ContactDetailClient({
           </CardContent>
         </Card>
 
-        {/* Activity timeline */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">
-              Actividades ({activities.length})
-            </CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowActivityForm(true)}
-              className="cursor-pointer"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Registrar
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {activities.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Sin actividades. Registra una llamada, email o nota.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {activities.map((activity) => {
-                  const Icon = activityIcons[activity.type] || FileText;
-                  const config = ACTIVITY_TYPE_CONFIG[activity.type as ActivityType];
-                  const isPending = !activity.completedAt && activity.scheduledAt;
-                  return (
-                    <div key={activity.id} className="flex gap-3">
-                      <div className="rounded-full bg-muted p-2 h-fit shrink-0">
-                        <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">
-                            {config?.label || activity.type}
-                          </Badge>
-                          {isPending && (
-                            <Badge
-                              variant="outline"
-                              className="text-xs text-orange-600 border-orange-600 cursor-pointer"
-                              onClick={() => handleCompleteActivity(activity.id)}
-                            >
-                              Completar
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-sm mt-1">{activity.description}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {formatRelativeDate(activity.createdAt)}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
+        {/* Actividades + Conversación WhatsApp */}
+        <Card className="lg:col-span-1">
+          <CardHeader className="pb-0">
+            <div className="flex items-center justify-between">
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setActiveTab("actividades")}
+                  className={`px-3 py-1.5 text-sm rounded-md cursor-pointer transition-colors ${activeTab === "actividades" ? "bg-muted font-medium" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Actividades ({activities.length})
+                </button>
+                {contact.phone && (
+                  <button
+                    onClick={() => setActiveTab("conversacion")}
+                    className={`px-3 py-1.5 text-sm rounded-md cursor-pointer transition-colors ${activeTab === "conversacion" ? "bg-muted font-medium" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    💬 WhatsApp
+                  </button>
+                )}
               </div>
+              {activeTab === "actividades" && (
+                <Button variant="ghost" size="sm" onClick={() => setShowActivityForm(true)} className="cursor-pointer">
+                  <Plus className="h-4 w-4 mr-1" />
+                  Registrar
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="pt-3">
+            {activeTab === "actividades" ? (
+              activities.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sin actividades. Registra una llamada, email o nota.</p>
+              ) : (
+                <div className="space-y-4">
+                  {activities.map((activity) => {
+                    const Icon = activityIcons[activity.type] || FileText;
+                    const config = ACTIVITY_TYPE_CONFIG[activity.type as ActivityType];
+                    const isPending = !activity.completedAt && activity.scheduledAt;
+                    return (
+                      <div key={activity.id} className="flex gap-3">
+                        <div className="rounded-full bg-muted p-2 h-fit shrink-0">
+                          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="text-xs">
+                              {config?.label || activity.type}
+                            </Badge>
+                            {isPending && (
+                              <Badge variant="outline" className="text-xs text-orange-600 border-orange-600 cursor-pointer" onClick={() => handleCompleteActivity(activity.id)}>
+                                Completar
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-sm mt-1">{activity.description}</p>
+                          {activity.attachmentPath && (
+                            <div className="flex items-center gap-2 mt-1.5">
+                              <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground truncate">{activity.attachmentPath.split("/").pop()}</span>
+                              {contact.email && (
+                                <button onClick={() => handleSendEmail(activity.id)} disabled={sendingEmail === activity.id} className="flex items-center gap-1 text-xs text-primary hover:underline disabled:opacity-50 cursor-pointer">
+                                  <Send className="h-3 w-3" />
+                                  {sendingEmail === activity.id ? "Enviando..." : "Enviar por email"}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-0.5">{formatRelativeDate(activity.createdAt)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : (
+              contact.phone && <WhatsAppChat phone={contact.phone} contactName={contact.name} />
             )}
           </CardContent>
         </Card>

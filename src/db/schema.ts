@@ -66,6 +66,7 @@ export const activities = sqliteTable("activities", {
   dealId: text("deal_id").references(() => deals.id),
   scheduledAt: integer("scheduled_at", { mode: "timestamp" }),
   completedAt: integer("completed_at", { mode: "timestamp" }),
+  attachmentPath: text("attachment_path"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .$defaultFn(() => new Date()),

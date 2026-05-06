@@ -33,7 +33,17 @@ export default async function ContactDetailPage({
     .all();
 
   const contactActivities = db
-    .select()
+    .select({
+      id: activities.id,
+      type: activities.type,
+      description: activities.description,
+      contactId: activities.contactId,
+      dealId: activities.dealId,
+      scheduledAt: activities.scheduledAt,
+      completedAt: activities.completedAt,
+      attachmentPath: activities.attachmentPath,
+      createdAt: activities.createdAt,
+    })
     .from(activities)
     .where(eq(activities.contactId, id))
     .orderBy(desc(activities.createdAt))

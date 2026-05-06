@@ -101,6 +101,9 @@ export async function POST(request: NextRequest) {
   }
 
   const fields = extractFields(payload);
+  const isDistribuidor = payload.type === "distribuidor";
+  const sourceOverride = typeof payload.source === "string" ? payload.source : undefined;
+
 // Evitar duplicados por telefono
   if (fields.phone) {
     const existing = db
@@ -136,7 +139,7 @@ export async function POST(request: NextRequest) {
         email: fields.email || null,
         phone: fields.phone || null,
         company: fields.company || null,
-        source: "webhook",
+        source: sourceOverride || "webhook",
         temperature: "cold",
         score: 0,
         notes: fields.notes || null,
@@ -146,33 +149,37 @@ export async function POST(request: NextRequest) {
       .returning()
       .get();
 
-    // Crear deal en primera etapa del pipeline
-    const firstStage = db
-      .select()
-      .from(pipelineStages)
-      .orderBy(pipelineStages.order)
-      .limit(1)
-      .get();
+    if (!isDistribuidor) {
+      // Crear deal en primera etapa del pipeline
+      const firstStage = db
+        .select()
+        .from(pipelineStages)
+        .orderBy(pipelineStages.order)
+        .limit(1)
+        .get();
 
-    if (firstStage) {
-      db.insert(deals)
-        .values({
-          title: `Pérgola - ${fields.name}`,
-          value: 0,
-          stageId: firstStage.id,
-          contactId: contact.id,
-          notes: fields.notes || null,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .run();
+      if (firstStage) {
+        db.insert(deals)
+          .values({
+            title: `Pérgola - ${fields.name}`,
+            value: 0,
+            stageId: firstStage.id,
+            contactId: contact.id,
+            notes: fields.notes || null,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run();
+      }
     }
 
     // Log activity
     db.insert(activities)
       .values({
         type: "note",
-        description: `Lead recibido via WhatsApp - Matías`,
+        description: isDistribuidor
+          ? "Lead madera — derivar a distribuidor autorizado"
+          : "Lead recibido via WhatsApp - Matías",
         contactId: contact.id,
         createdAt: now,
       })

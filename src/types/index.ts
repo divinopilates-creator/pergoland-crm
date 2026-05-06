@@ -1,6 +1,6 @@
 export type Temperature = "cold" | "warm" | "hot";
 
-export type ActivityType = "call" | "email" | "meeting" | "note" | "follow_up";
+export type ActivityType = "call" | "email" | "meeting" | "note" | "follow_up" | "cotizacion" | "visita";
 
 export type LeadSource =
   | "website"
