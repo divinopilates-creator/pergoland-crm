@@ -4,8 +4,11 @@ import crypto from "crypto";
 
 const DB_PATH = path.join(process.cwd(), "data", "crm.db");
 const sqlite = new Database(DB_PATH);
+sqlite.pragma("foreign_keys = OFF");
 
-// Borrar etapas viejas
+// Borrar en orden correcto
+sqlite.exec(`DELETE FROM activities;`);
+sqlite.exec(`DELETE FROM deals;`);
 sqlite.exec(`DELETE FROM pipeline_stages;`);
 
 // Insertar etapas Pergoland
@@ -28,4 +31,5 @@ for (const s of stages) {
 }
 
 console.log("Etapas Pergoland creadas OK");
+sqlite.pragma("foreign_keys = ON");
 sqlite.close();
