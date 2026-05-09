@@ -1,9 +1,7 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 
 export const contacts = sqliteTable("contacts", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   email: text("email"),
   phone: text("phone"),
@@ -12,12 +10,17 @@ export const contacts = sqliteTable("contacts", {
   temperature: text("temperature").notNull().default("cold"),
   score: integer("score").notNull().default(0),
   notes: text("notes"),
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
-    .notNull()
-    .$defaultFn(() => new Date()),
+  // ── Campos Pergoland ──────────────────────────────────
+  comuna: text("comuna"),
+  medidas: text("medidas"),
+  modelo: text("modelo"),
+  tipo_cielo: text("tipo_cielo"),
+  presupuesto_estimado: integer("presupuesto_estimado"),
+  fecha_visita: integer("fecha_visita", { mode: "timestamp" }),
+  direccion: text("direccion"),
+  // ─────────────────────────────────────────────────────
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 });
 
 export const pipelineStages = sqliteTable("pipeline_stages", {

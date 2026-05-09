@@ -100,12 +100,29 @@ function initTables(db: Database.Database): void {
 
 function runMigrations(db: Database.Database): void {
   try {
+    // Agregar campos Pergoland si no existen
+    const contactCols = db.prepare("PRAGMA table_info(contacts)").all() as Array<{ name: string }>;
+    const camposPergoland = [
+      { name: "comuna",               sql: "ALTER TABLE contacts ADD COLUMN comuna TEXT" },
+      { name: "medidas",              sql: "ALTER TABLE contacts ADD COLUMN medidas TEXT" },
+      { name: "modelo",               sql: "ALTER TABLE contacts ADD COLUMN modelo TEXT" },
+      { name: "tipo_cielo",           sql: "ALTER TABLE contacts ADD COLUMN tipo_cielo TEXT" },
+      { name: "presupuesto_estimado", sql: "ALTER TABLE contacts ADD COLUMN presupuesto_estimado INTEGER" },
+      { name: "fecha_visita",         sql: "ALTER TABLE contacts ADD COLUMN fecha_visita INTEGER" },
+      { name: "direccion",            sql: "ALTER TABLE contacts ADD COLUMN direccion TEXT" },
+    ];
+    for (const campo of camposPergoland) {
+      if (!contactCols.find((c) => c.name === campo.name)) {
+        db.exec(campo.sql);
+      }
+    }
+
     // Add attachment_path column if missing
     const cols = db.prepare("PRAGMA table_info(activities)").all() as Array<{ name: string }>;
     if (!cols.find((c) => c.name === "attachment_path")) {
       db.exec("ALTER TABLE activities ADD COLUMN attachment_path TEXT");
     }
-
+    
     // Add Cotización Enviada and Visita Programada stages if missing
     const stageNames = (db.prepare("SELECT name FROM pipeline_stages").all() as Array<{ name: string }>).map((s) => s.name);
     const maxOrder = (db.prepare("SELECT MAX(\"order\") as mo FROM pipeline_stages").get() as { mo: number | null }).mo || 4;
