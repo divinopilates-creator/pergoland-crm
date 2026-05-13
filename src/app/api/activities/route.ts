@@ -116,38 +116,15 @@ async function aplicarReglasPipeline(type: string, contactId: string, dealId: st
   if (dealToMove) {
     await db.update(deals).set({ stageId: targetStage.id, updatedAt: new Date() }).where(eq(deals.id, dealToMove.id));
   }
-}
-// Reemplazar la función aplicarReglasPipeline en activities/route.ts
-// por esta versión que también dispara el timer en el agente
 
-async function aplicarReglasPipeline(type: string, contactId: string, dealId: string | null) {
-  const rule = STAGE_RULES[type];
-  if (!rule) return;
-
-  await db.update(contacts).set({ temperature: rule.temperature, updatedAt: new Date() }).where(eq(contacts.id, contactId));
-
-  const stages = await db.select().from(pipelineStages).orderBy(asc(pipelineStages.order));
-  const targetStage = stages.find((s) => s.name === rule.stageName);
-  if (!targetStage) return;
-
-  const dealRows = dealId
-    ? await db.select().from(deals).where(eq(deals.id, dealId))
-    : await db.select().from(deals).where(eq(deals.contactId, contactId));
-  const dealToMove = dealRows[0];
-
-  if (dealToMove) {
-    await db.update(deals).set({ stageId: targetStage.id, updatedAt: new Date() }).where(eq(deals.id, dealToMove.id));
-  }
-
-  // ── Trigger al agente para activar timer de recordatorio ──
+  // Trigger al agente para activar timer de recordatorio
   const agentkitUrl = process.env.AGENTKIT_URL;
   if (agentkitUrl && (type === "cotizacion" || type === "visita")) {
     try {
-      // Obtener teléfono del contacto
       const contactRows = await db.select().from(contacts).where(eq(contacts.id, contactId));
       const contact = contactRows[0];
       if (contact?.phone) {
-        const telefono = contact.phone.replace(/\D/g, ""); // solo números
+        const telefono = contact.phone.replace(/\D/g, "");
         await fetch(`${agentkitUrl}/handoff/activar`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
